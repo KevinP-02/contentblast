@@ -112,7 +112,7 @@ function LandingPage({ onGetStarted, onLogin }) {
           </p>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <Btn size="lg" onClick={onGetStarted}>{"Start for £12/month →"}</Btn>
-            <span style={{ fontSize: 13, color: t.inkFaint }}>No credit card for trial</span>
+            <span style={{ fontSize: 13, color: t.inkFaint }}>Cancel anytime!</span>
           </div>
         </div>
         <div style={{ display: "flex", gap: 48, marginTop: 60, paddingTop: 32, borderTop: "1.5px solid " + t.lineMed, flexWrap: "wrap" }}>
@@ -231,7 +231,7 @@ function LandingPage({ onGetStarted, onLogin }) {
           <div style={{ position: "relative", zIndex: 1 }}>
             <h2 style={{ fontFamily: ff.display, fontSize: 28, fontWeight: 800, marginBottom: 12, letterSpacing: -0.5 }}>Your content deserves a bigger audience.</h2>
             <p style={{ fontSize: 15, color: t.inkMuted, marginBottom: 28, lineHeight: 1.6 }}>Stop letting great content die on one platform. Start repurposing in 30 seconds.</p>
-            <Btn size="lg" onClick={onGetStarted}>{"Try ContentBlast free →"}</Btn>
+            <Btn size="lg" onClick={onGetStarted}>{"Try ContentBlast Today! →"}</Btn>
           </div>
         </div>
       </section>
