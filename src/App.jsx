@@ -306,6 +306,69 @@ function AuthPage({ onAuth, mode: initialMode, onBack }) {
   )
 }
 
+// ============== PAYWALL PAGE ==============
+
+function PaywallPage({ user, onLogout, onPaid }) {
+  const [loadingPlan, setLoadingPlan] = useState(null)
+
+  const handleCheckout = async (planId) => {
+    setLoadingPlan(planId)
+    try {
+      const response = await fetch("/api/create-checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + (await supabase.auth.getSession()).data.session?.access_token,
+        },
+        body: JSON.stringify({ planId }),
+      })
+      const data = await response.json()
+      if (data.url) window.location.href = data.url
+    } catch (err) {
+      alert("Failed to create checkout session.")
+    }
+    setLoadingPlan(null)
+  }
+
+  return (
+    <div style={{ background: t.cream, color: t.ink, fontFamily: ff.body, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 32px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+        <Logo />
+        <Btn variant="ghost" onClick={onLogout}>Log out</Btn>
+      </nav>
+
+      <div style={{ maxWidth: 900, padding: "60px 32px", textAlign: "center", width: "100%" }}>
+        <h1 style={{ fontFamily: ff.display, fontSize: 34, fontWeight: 800, marginBottom: 8, letterSpacing: -0.8 }}>Choose your plan to get started</h1>
+        <p style={{ fontSize: 15, color: t.inkMuted, marginBottom: 48 }}>Pick a plan and start repurposing content in seconds. Cancel anytime.</p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, maxWidth: 900, margin: "0 auto" }}>
+          {PLANS.map((plan) => (
+            <div key={plan.id} style={{ background: plan.popular ? t.ink : t.paper, color: plan.popular ? "#fff" : t.ink, border: plan.popular ? "none" : "1.5px solid " + t.lineMed, borderRadius: 10, padding: "32px 28px", position: "relative", transform: plan.popular ? "scale(1.03)" : "none", boxShadow: plan.popular ? "0 16px 48px rgba(0,0,0,0.15)" : "none" }}>
+              {plan.popular && <div style={{ position: "absolute", top: -10, left: 24, background: t.vermillion, color: "#fff", padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Most popular</div>}
+              <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, color: plan.popular ? "rgba(255,255,255,0.5)" : t.inkMuted, marginBottom: 12 }}>{plan.name}</div>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ fontFamily: ff.display, fontSize: 42, fontWeight: 800 }}>{"£"}{plan.price}</span>
+                <span style={{ fontSize: 14, color: plan.popular ? "rgba(255,255,255,0.5)" : t.inkMuted }}>/mo</span>
+              </div>
+              <p style={{ fontSize: 13, color: plan.popular ? "rgba(255,255,255,0.6)" : t.inkMuted, marginBottom: 24, lineHeight: 1.5 }}>{plan.desc}</p>
+              <Btn variant={plan.popular ? "primary" : "dark"} style={{ width: "100%", marginBottom: 20 }} onClick={() => handleCheckout(plan.id)} loading={loadingPlan === plan.id} disabled={!!loadingPlan}>
+                {loadingPlan === plan.id ? "Redirecting..." : "Subscribe →"}
+              </Btn>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left" }}>
+                {plan.features.map((f, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: plan.popular ? "rgba(255,255,255,0.7)" : t.inkMuted }}>
+                    <span style={{ color: plan.popular ? t.vermillion : t.moss, fontSize: 12, fontWeight: 700 }}>{"✓"}</span> {f}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ============== DASHBOARD ==============
 
 function Dashboard({ user, onLogout }) {
@@ -623,12 +686,26 @@ export default function App() {
   const [authMode, setAuthMode] = useState("signup")
   const [user, setUser] = useState(null)
 
+  const checkPaidStatus = async (sessionUser) => {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("stripe_subscription_id, plan")
+      .eq("id", sessionUser.id)
+      .single()
+
+    if (profile?.stripe_subscription_id) {
+      setPage("dashboard")
+    } else {
+      setPage("paywall")
+    }
+  }
+
   useEffect(() => {
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user)
-        setPage("dashboard")
+        checkPaidStatus(session.user)
       } else {
         setPage("landing")
       }
@@ -638,7 +715,7 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
         setUser(session.user)
-        setPage("dashboard")
+        checkPaidStatus(session.user)
       } else if (event === "SIGNED_OUT") {
         setUser(null)
         setPage("landing")
@@ -647,6 +724,16 @@ export default function App() {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  // Check for successful checkout return
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("checkout") === "success" && user) {
+      // Give Stripe webhook a moment to process, then re-check
+      setTimeout(() => checkPaidStatus(user), 2000)
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [user])
 
   if (page === "loading") {
     return (
@@ -664,7 +751,11 @@ export default function App() {
   }
 
   if (page === "auth") {
-    return <AuthPage onAuth={(u) => { setUser(u); setPage("dashboard"); }} mode={authMode} onBack={() => setPage("landing")} />
+    return <AuthPage onAuth={(u) => { setUser(u); checkPaidStatus(u); }} mode={authMode} onBack={() => setPage("landing")} />
+  }
+
+  if (page === "paywall") {
+    return <PaywallPage user={user} onLogout={() => { supabase.auth.signOut(); setUser(null); setPage("landing"); }} onPaid={() => setPage("dashboard")} />
   }
 
   return <Dashboard user={user} onLogout={() => { setUser(null); setPage("landing"); }} />
